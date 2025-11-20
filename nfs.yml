@@ -1,38 +1,73 @@
 ---
 - name: Install and configure NFS Server on EC2
-  hosts: all
+  hosts: nfs_servers            # use a dedicated group instead of "all"
   become: true
+  gather_facts: true
 
+  vars:
+    pkg_rhel:
+      - nfs-utils
+      - rpcbind
+    pkg_debian:
+      - nfs-kernel-server
+      - nfs-common
+      - rpcbind
+
+    nfs_services_rhel:
+      - rpcbind
+      - nfs-server
+    nfs_services_debian:
+      - rpcbind
+      - nfs-kernel-server
+
+    exports_block: "/nfs-server 172.31.0.0/16(rw,sync,no_root_squash)"
 
   tasks:
-
-    - name: Install NFS server packages
+    - name: Install NFS packages (RHEL family)
       package:
-        name:
-          - nfs-utils
-          - mountd
-          - rpcbind
+        name: "{{ pkg_rhel }}"
         state: present
+      when: ansible_facts['os_family'] == 'RedHat'
 
-    - name: Ensure /nfs-server directory exists
+    - name: Install NFS packages (Debian family)
+      package:
+        name: "{{ pkg_debian }}"
+        state: present
+      when: ansible_facts['os_family'] == 'Debian'
+
+    - name: Ensure NFS services are enabled & started (RHEL)
+      service:
+        name: "{{ item }}"
+        enabled: true
+        state: started
+      loop: "{{ nfs_services_rhel }}"
+      when: ansible_facts['os_family'] == 'RedHat'
+
+    - name: Ensure NFS services are enabled & started (Debian)
+      service:
+        name: "{{ item }}"
+        enabled: true
+        state: started
+      loop: "{{ nfs_services_debian }}"
+      when: ansible_facts['os_family'] == 'Debian'
+
+    - name: Ensure /nfs-server exists (owned by root)
       file:
         path: /nfs-server
         state: directory
-        owner: jenkins
-        group: jenkins
+        owner: root
+        group: root
         mode: '0755'
 
-    - name: Configure NFS exports
-      copy:
-        dest: /etc/exports
-        content: |
-          /nfs-server  *(rw,sync,no_root_squash)
+    - name: Ensure /etc/exports contains our export (idempotent)
+      blockinfile:
+        path: /etc/exports
+        marker: "# {mark} ANSIBLE MANAGED NFS EXPORT"
+        block: "{{ exports_block }}"
+      notify: reexport_exports
 
-    - name: Reload NFS exports
-      command: exportfs -vra
-
-    - name: Enable and start NFS server
-      service:
-        name: nfs-server
-        state: started
-        enabled: true
+  handlers:
+    - name: reexport_exports
+      become: true
+      command: exportfs -r
+      listen: reexport_exports
