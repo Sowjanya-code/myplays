@@ -1,0 +1,6 @@
+      package:
+        name:
+          - nfs-utils
+          - mountd
+          - rpcbind
+        state: present
