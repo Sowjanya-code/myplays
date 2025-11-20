@@ -1,7 +1,8 @@
 ---
 - name: Install and configure NFS Server on EC2
-  hosts: localhost
+  hosts: all
   become: true
+
 
   tasks:
 
