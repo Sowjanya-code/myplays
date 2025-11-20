@@ -10,6 +10,8 @@
       package:
         name:
           - nfs-utils
+          - mountd
+          - rpcbind
         state: present
 
     - name: Ensure /nfs-server directory exists
